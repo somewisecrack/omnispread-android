@@ -1,13 +1,5 @@
 package com.example.omnispread.data
 
-data class ScanRequest(
-    val tickers: List<String>,
-    val period: String = "3y",
-    val interval: String = "1d",
-    val start_date: String? = null,
-    val end_date: String? = null,
-)
-
 data class PairResult(
     val pair: String = "",
     val x: String = "",
@@ -38,15 +30,6 @@ data class HistoricalZScore(
     val time: Long = 0L,
     val value: Double = 0.0,
 )
-
-data class TaskResult(
-    val task_id: String = "",
-    val status: String = "processing",
-    val results: List<PairResult> = emptyList(),
-    val error: String? = null,
-)
-
-data class ScanStartResponse(val task_id: String)
 
 data class BacktestRequest(
     val x: String,

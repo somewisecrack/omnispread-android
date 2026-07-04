@@ -3,15 +3,15 @@ package com.example.omnispread.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.omnispread.data.ApiClientProvider
 import com.example.omnispread.data.BacktestRequest
-import com.example.omnispread.data.OmniSpreadRepository
+import com.example.omnispread.data.OmniSpreadEngine
 import com.example.omnispread.data.PairResult
-import com.example.omnispread.data.ScanRequest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 sealed interface ScanState {
     object Idle : ScanState
@@ -21,9 +21,6 @@ sealed interface ScanState {
 }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val repo: OmniSpreadRepository
-        get() = OmniSpreadRepository(ApiClientProvider.getService(getApplication()))
 
     private val _scanState = MutableStateFlow<ScanState>(ScanState.Idle)
     val scanState: StateFlow<ScanState> = _scanState.asStateFlow()
@@ -41,7 +38,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val currentEndDate: StateFlow<String> = _currentEndDate.asStateFlow()
 
     fun selectPair(pair: PairResult?) { _selectedPair.value = pair }
-
     fun setPendingBacktest(request: BacktestRequest?) { _pendingBacktest.value = request }
 
     fun reset() {
@@ -64,29 +60,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             try {
-                val response = repo.startScan(ScanRequest(tickers, period, interval, startDate, endDate))
-                _scanState.value = ScanState.Scanning("Scanning pairs — this may take a moment...")
-
-                val result = repo.pollResults(
-                    taskId = response.task_id,
-                    onUpdate = { update ->
-                        if (update.status == "processing") {
-                            _scanState.value = ScanState.Scanning("Analyzing cointegration & running Monte Carlo...")
-                        }
-                    },
-                )
-
-                when (result.status) {
-                    "completed" -> {
-                        val msg = if (result.results.isEmpty())
-                            "No pairs met the Z > 2.0 threshold"
-                        else
-                            "Found ${result.results.size} actionable pair${if (result.results.size > 1) "s" else ""}"
-                        _scanState.value = ScanState.Success(result.results, msg)
-                    }
-                    "failed" -> _scanState.value = ScanState.Error(result.error ?: "Scan failed unexpectedly")
-                    else -> _scanState.value = ScanState.Error("Unexpected scan status: ${result.status}")
+                val results = withContext(Dispatchers.IO) {
+                    val engine = OmniSpreadEngine(
+                        tickers = tickers,
+                        period = period,
+                        interval = interval,
+                        startDate = startDate,
+                        endDate = endDate,
+                        onProgress = { msg ->
+                            _scanState.value = ScanState.Scanning(msg)
+                        },
+                    )
+                    engine.runScan()
                 }
+
+                val msg = if (results.isEmpty())
+                    "No pairs met the Z > 2.0 threshold"
+                else
+                    "Found ${results.size} actionable pair${if (results.size > 1) "s" else ""}"
+                _scanState.value = ScanState.Success(results, msg)
             } catch (e: Exception) {
                 _scanState.value = ScanState.Error(e.message ?: "An error occurred")
             }
