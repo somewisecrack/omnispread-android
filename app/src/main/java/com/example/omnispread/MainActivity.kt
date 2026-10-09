@@ -15,6 +15,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.omnispread.ui.BacktestScreen
 import com.example.omnispread.ui.MainScreen
+import com.example.omnispread.ui.TradeScreen
 import com.example.omnispread.ui.theme.BgPrimary
 import com.example.omnispread.ui.theme.OmniSpreadTheme
 import com.example.omnispread.viewmodel.MainViewModel
@@ -34,6 +35,13 @@ class MainActivity : ComponentActivity() {
                             MainScreen(
                                 viewModel            = mainViewModel,
                                 onNavigateToBacktest = { navController.navigate("backtest") },
+                                onNavigateToTrade    = { navController.navigate("trade") },
+                            )
+                        }
+                        composable("trade") {
+                            TradeScreen(
+                                viewModel = mainViewModel,
+                                onBack    = { mainViewModel.clearTrade(); navController.popBackStack() },
                             )
                         }
                         composable("backtest") {

@@ -66,6 +66,22 @@ object YahooFinanceApi {
         }
     }
 
+    /** Company name from the chart endpoint's metadata (longName, else shortName). */
+    fun fetchName(symbol: String): String? {
+        val request = Request.Builder()
+            .url("https://query1.finance.yahoo.com/v8/finance/chart/$symbol?range=1d&interval=1d")
+            .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
+            .header("Accept", "application/json")
+            .build()
+        return try {
+            val body = client.newCall(request).execute().use { it.body?.string() } ?: return null
+            val meta = JSONObject(body).getJSONObject("chart").getJSONArray("result").getJSONObject(0).getJSONObject("meta")
+            meta.optString("longName").ifBlank { meta.optString("shortName") }.ifBlank { null }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /** Fetch prices as a map keyed by date-string "yyyy-MM-dd" for alignment across tickers. */
     fun fetchPriceMap(symbol: String, range: String = "3y", interval: String = "1d"): Map<String, Double> {
         return fetchPrices(symbol, range, interval).associate { (ts, price) ->
