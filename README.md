@@ -1,8 +1,8 @@
 # OmniSpread
 
-**Statistical pairs-trading scanner and backtester for Indian equities — runs entirely on-device, no server required.**
+**Statistical pairs-trading scanner for S&P 100 stocks, with tastytrade option spreads and news sentiment — runs on-device, no server required.**
 
-OmniSpread fetches live price data from Yahoo Finance, screens every pair in your watchlist for cointegration, and ranks them by Monte Carlo–estimated probability of profit. Built with Kotlin + Jetpack Compose.
+OmniSpread screens every pair in a universe for cointegration using the same **v2** method as the [OmniSpread Python backend](https://github.com/somewisecrack/OmniSpread), adds per-ticker **news sentiment** (TickerVibe-style) and **tastytrade volatility data**, and turns a signal into a pair of **credit or debit vertical spreads** that you can dry-run and place from the phone.
 
 ---
 
@@ -10,134 +10,115 @@ OmniSpread fetches live price data from Yahoo Finance, screens every pair in you
 
 | Feature | Details |
 |---|---|
-| **Cointegration screening** | CADF (Kalman-filtered OLS + ADF) and Johansen tests run in parallel; a pair must pass at least one |
-| **Kalman beta tracking** | Dynamic hedge ratio updated online — no look-ahead bias |
-| **Hurst exponent filter** | Spreads with H ≥ 0.45 are discarded (non-mean-reverting) |
-| **Ensemble Monte Carlo** | 80 parameter draws × 2 000 block-bootstrap simulations per pair → median P(profit) with 5th/95th CI |
-| **Z-score chart** | Interactive historical z-score chart per pair |
-| **Backtest** | Forward-looking P&L simulation from scan date using live Yahoo Finance prices |
-| **Nifty 50 preset** | One-tap scan of all 50 Nifty constituents; custom tickers also supported |
-| **Fully offline engine** | All maths (OLS, eigendecomposition, ADF, Johansen) implemented from scratch in Kotlin — no Python, no server |
+| **v2 cointegration screen** | Johansen (`det_order=0`, `k_ar_diff=1`) must reject rank 0, **and** Engle–Granger in both orderings (larger p-value) must be < 0.05. Static Johansen hedge, raw or log prices. |
+| **Parity with Python** | ADF with AIC lag selection, MacKinnon p-values and Johansen are ported from statsmodels; unit tests check them against statsmodels on synthetic and real data. |
+| **Universe** | The S&P 100 (101 tickers, 5,050 pairs), or one of its GICS sectors. Downloads and pair screening run in parallel. |
+| **News sentiment per ticker** | Last 7 days of Google News RSS headlines, scored with an on-device finance lexicon and recency-weighted; shown on each result with the top headlines in the pair sheet. |
+| **tastytrade volatility** | IV index, IV rank and percentile, HV 30/60/90, **IV for every expiry**, next earnings date and industry (used for the same-industry flag). |
+| **Option spreads per leg** | Long leg → bullish vertical, short leg → bearish vertical. Credit vs debit is chosen per leg from IV rank and that expiry's IV against realised vol over a matching window. |
+| **Order flow** | Dry-run both legs (buying-power effect, fees, warnings), then place two Day limit orders at mid after an explicit confirmation. Sandbox or production. |
+| **Z-score chart & stock backtest** | As before. |
 
 ---
 
-## Screenshots
+## How it works
 
-> _Add screenshots here_
+### 1. Scan
+1. Prices: Yahoo Finance adjusted closes (tastytrade has no REST price history). Berkshire is `BRK-B` on Yahoo and `BRK/B` on tastytrade; the app maps between them.
+2. If tastytrade is connected, `GET /market-metrics` is loaded for the universe first (industry, IV, earnings).
+3. For each pair: Johansen rank ≥ 1 → CADF p < 0.05 → β > 0 from the Johansen vector → spread `Y − β·X` → half-life → z over a half-life window → keep if |z| > 2.
+4. Results are ranked by CADF p-value, then |z|.
 
----
+`qty` is always X shares per one Y share. `SHORT_SPREAD` = buy X / sell Y, `LONG_SPREAD` = sell X / buy Y.
 
-## Tech Stack
+### 2. Sentiment
+For every ticker in a result: company name from Yahoo → Google News RSS query `"<name>" OR "<TICKER> stock" when:7d` → each headline scored −1…+1 → recency-weighted mean (3-day half-life). Bullish > +0.15, Bearish < −0.15. The **Sentiment Δ** sort ranks pairs where the news favours the signal (long-leg score minus short-leg score).
 
-- **Language:** Kotlin
-- **UI:** Jetpack Compose + Material 3
-- **Architecture:** MVVM (ViewModel + StateFlow)
-- **Navigation:** Navigation Compose
-- **Networking:** OkHttp (Yahoo Finance chart API)
-- **Min SDK:** 26 (Android 8.0)
-- **Target SDK:** 35
+TickerVibe uses FinBERT; that model is ~440 MB, so the app uses a compact lexicon with negation handling instead. Treat the score as a rough news-tone flag.
 
----
+### 3. Options plan
+| Step | Rule |
+|---|---|
+| Expiry | first expiry ≥ half-life × 1.5 (trading → calendar days), 7–60 DTE, preferring one that ends **before earnings** |
+| Credit vs debit | IVR ≥ 50 → credit; IVR < 25 → debit; otherwise credit if that expiry's IV > realised vol over the same horizon |
+| Credit strikes | OmniSpread `vol` rule: sell ~1 expected move OTM, choose the long strike (≤ 2.5 EM) with the best credit / max-loss |
+| Debit strikes | buy the strike nearest spot, sell ~1 expected move in the favourable direction |
+| Sizing | contract counts whose delta-dollar ratio is closest to the hedge (`qty·Px : Py`), within a $1,000 max-loss budget for the pair |
 
-## How It Works
+Expected move = spot × IV(expiry) × √(DTE/365). Quotes and Greeks come from `GET /market-data/by-type`.
 
-### 1. Price Fetch
-Prices are pulled from the Yahoo Finance chart endpoint (no API key needed) for the selected period (`1y`, `3y`, or `5y`) and interval (`1d` by default).
-
-### 2. Pair Screening
-For every pair `(X, Y)` in the ticker list:
-
-1. **CADF path** — OLS regression `Y = α + β·X` → Kalman filter refines β → ADF test on the spread. Passes if p-value < 10 %.
-2. **Johansen path** — Full Johansen trace/max-eigenvalue test at 5 % level. Passes if at least one rank hypothesis is rejected.
-
-A pair advances if it passes either test **and** its current |z-score| > 2 **and** its Hurst exponent < 0.45.
-
-### 3. Monte Carlo
-For each screened pair an AR(1) model is fit to the spread. Then:
-- 80 parameter-uncertainty draws (from OLS standard errors + χ² variance draw)
-- Each draw runs 2 000 block-bootstrap residual simulations over one half-life horizon
-- A "win" = spread reverts toward the mean at least once within the half-life
-
-Output: **P(profit) median** and 90 % credible interval.
-
-### 4. Backtest
-The backtest engine fetches the most recent 60 days of prices forward from the scan date, aligns timestamps, and simulates a long/short spread trade entry at bar 0, tracking P&L through `half_life` bars.
+### 4. Orders
+Each leg is a separate 2-leg limit order (`POST /accounts/{acct}/orders/dry-run`, then `/orders`) with a unique `external-identifier`. The legs are **not** linked, so one can fill without the other. The **Place orders** button is enabled only after both legs pass a dry-run.
 
 ---
 
-## Getting Started
+## tastytrade setup
 
-### Prerequisites
-- Android Studio Hedgehog or newer
-- Android SDK 35
-- JDK 11+
+1. my.tastytrade.com → **Manage → My Profile → API → OAuth Applications** → create an app (any redirect URI, e.g. `https://localhost`).
+2. **Manage → Create Grant** → copy the refresh token. Copy the client secret when the app is created (it is shown once).
+3. In the app: ⚙ → paste both → **Test connection** → pick the account → **Save**.
 
-### Build
+Use the **read** scope for scanning and volatility data. Dry-runs and orders need the **trade** scope; with a read-only grant they fail with "insufficient scopes". Secrets are encrypted with an Android Keystore key and sent only to tastytrade's OAuth endpoint. App backup is disabled.
+
+---
+
+## Build
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/OmniSpread.git
-cd OmniSpread
 ./gradlew assembleDebug
-```
-
-Install on a connected device:
-
-```bash
 ./gradlew installDebug
 ```
 
-### Run
+Requires Android Studio (or its bundled JDK) and Android SDK 35.
 
-1. Open the app.
-2. Choose a preset (e.g. **Nifty 50**) or enter custom tickers.
-3. Select period and interval.
-4. Tap **Scan** — results appear ranked by P(profit).
-5. Tap any pair for a detail sheet with z-score chart and backtest button.
+### Tests
+
+```bash
+./gradlew testDebugUnitTest
+```
+
+- `StatsParityTest` checks CADF p-values, Johansen statistics, rank, β, half-life and z against statsmodels 0.14.6 on 8 synthetic series and 91 real pairs × 2 price bases (fixtures in `app/src/test/resources`).
+- `Sp100ScanLiveTest` (skipped by default) scans the full S&P 100 from Yahoo and writes the passing pairs: `OMNISPREAD_SCAN_OUT=/tmp/sp100.tsv ./gradlew testDebugUnitTest --tests '*Sp100ScanLiveTest*' --rerun`. On 2026-10-09 (3y, raw) it matched the Python backend exactly (COP/MRK, GS/MO).
+- `TastytradeLiveTest` (read-only, skipped by default) builds a live plan and dry-runs it:
+  `OMNISPREAD_TASTY_ENV=/path/to/.env ./gradlew testDebugUnitTest --tests '*TastytradeLiveTest*' -i`, where the file holds `TT_CLIENT_SECRET=`, `TT_REFRESH_TOKEN=` and optionally `TT_ENV=sandbox`.
 
 ---
 
-## Project Structure
+## Project structure
 
 ```
 app/src/main/java/com/example/omnispread/
 ├── data/
-│   ├── Models.kt            # Data classes (PairResult, BacktestResult, …)
-│   ├── OmniSpreadEngine.kt  # Core engine: cointegration + Monte Carlo
-│   ├── BacktestEngine.kt    # Forward P&L simulation
-│   └── YahooFinanceApi.kt   # Yahoo Finance HTTP client
-├── viewmodel/
-│   ├── MainViewModel.kt     # Scan orchestration + state
-│   └── BacktestViewModel.kt # Backtest state
-└── ui/
-    ├── MainScreen.kt        # Scan form + results list
-    ├── ScanForm.kt          # Ticker / period / interval picker
-    ├── ResultCard.kt        # Per-pair result card
-    ├── PairDetailSheet.kt   # Bottom sheet: metrics + chart
-    ├── ZScoreChart.kt       # Historical z-score chart
-    ├── PnLChart.kt          # Backtest P&L chart
-    ├── BacktestScreen.kt    # Backtest screen
-    ├── SettingsDialog.kt    # App settings
-    └── theme/               # Material 3 theme
+│   ├── Stats.kt            # ADF/AIC, MacKinnon p-values, Johansen (statsmodels port)
+│   ├── OmniSpreadEngine.kt # v2 scan
+│   ├── Presets.kt          # S&P 100 constituents + sectors
+│   ├── TastytradeApi.kt    # OAuth, market metrics, chains, quotes, dry-run/orders
+│   ├── CredentialStore.kt  # Keystore-encrypted credentials
+│   ├── OptionStrategy.kt   # signal → credit/debit verticals, sizing
+│   ├── NewsSentiment.kt    # Google News RSS + finance lexicon
+│   ├── YahooFinanceApi.kt  # prices + company names
+│   ├── BacktestEngine.kt   # forward stock backtest
+│   └── Models.kt
+├── viewmodel/              # scan, enrichment, trade state
+└── ui/                     # scan form, results, pair sheet, trade screen, settings
 ```
 
 ---
 
-## Statistical Methods
+## Data sources and limits
 
-| Method | Reference |
-|---|---|
-| ADF test | Dickey & Fuller (1979); MacKinnon (1994) critical values |
-| Johansen cointegration | Johansen (1988); trace & max-eigenvalue statistics |
-| Kalman filter | Kalman (1960) — 1-D scalar filter for dynamic β |
-| Hurst exponent | Rescaled-range analysis via log-log OLS on lagged variances |
-| Block bootstrap | Künsch (1989) — preserves autocorrelation in residuals |
-| AR(1) simulation | Standard autoregressive model with parameter-uncertainty draws |
+- **Yahoo Finance** chart API is unofficial and can change.
+- **Google News RSS** is for personal, non-commercial use under Google's feed terms.
+- **tastytrade** REST quotes are for funded accounts; sandbox quotes are delayed.
+- The S&P 100 list is a snapshot (October 2026) in `Presets.kt`; update it when constituents change.
+- GOOG/GOOGL are two share classes of one company and will usually pair with each other.
+- Screening 5,050 pairs without multiple-testing correction will produce some false positives.
 
 ---
 
 ## Disclaimer
 
-OmniSpread is **for educational and research purposes only**. It is not financial advice. Past statistical relationships do not guarantee future performance. Always consult a qualified financial professional before trading.
+OmniSpread is **for educational and research purposes only**. It is not financial advice. Past statistical relationships do not guarantee future performance. Options involve risk and are not suitable for all investors. You are responsible for every order placed from your account.
 
 ---
 

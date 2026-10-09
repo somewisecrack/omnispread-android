@@ -1,6 +1,8 @@
 package com.example.omnispread.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,8 +56,8 @@ import com.example.omnispread.viewmodel.MainViewModel
 import com.example.omnispread.viewmodel.ScanState
 
 private enum class SortField(val label: String) {
-    PROB_PROFIT("P(Profit)"), Z_SCORE("Z-Score"),
-    HALF_LIFE("Half-Life"), HURST("Hurst"), EXP_RETURN("Exp.Ret"),
+    CADF("CADF p"), Z_SCORE("|Z|"),
+    HALF_LIFE("Half-Life"), SENTIMENT("Sentiment Δ"), EXP_RETURN("Exp.Ret"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,25 +65,35 @@ private enum class SortField(val label: String) {
 fun MainScreen(
     viewModel: MainViewModel,
     onNavigateToBacktest: () -> Unit,
+    onNavigateToTrade: () -> Unit,
 ) {
     val scanState   by viewModel.scanState.collectAsState()
     val selectedPair by viewModel.selectedPair.collectAsState()
     val interval    by viewModel.currentInterval.collectAsState()
     val endDate     by viewModel.currentEndDate.collectAsState()
+    val insights    by viewModel.insights.collectAsState()
+    val enrichStatus by viewModel.enrichStatus.collectAsState()
+    val config      by viewModel.config.collectAsState()
 
     var showSettings  by remember { mutableStateOf(false) }
-    var sortField     by remember { mutableStateOf(SortField.PROB_PROFIT) }
-    var sortAsc       by remember { mutableStateOf(false) }
+    var sortField     by remember { mutableStateOf(SortField.CADF) }
+    var sortAsc       by remember { mutableStateOf(true) }
 
     val isScanning = scanState is ScanState.Scanning
     val results    = (scanState as? ScanState.Success)?.results ?: emptyList()
 
-    val sorted = remember(results, sortField, sortAsc) {
+    val sorted = remember(results, sortField, sortAsc, insights) {
+        // Sentiment Δ = how much the news favours the signal: long-leg score minus short-leg score.
+        fun sentimentEdge(r: PairResult): Double {
+            val sx = insights[r.x]?.sentiment?.score ?: 0.0
+            val sy = insights[r.y]?.sentiment?.score ?: 0.0
+            return if (r.direction == "SHORT_SPREAD") sx - sy else sy - sx
+        }
         val cmp: Comparator<PairResult> = when (sortField) {
-            SortField.PROB_PROFIT -> compareBy { it.prob_profit }
-            SortField.Z_SCORE     -> compareBy { it.z_score }
+            SortField.CADF        -> compareBy { it.cadf_pvalue }
+            SortField.Z_SCORE     -> compareBy { kotlin.math.abs(it.z_score) }
             SortField.HALF_LIFE   -> compareBy { it.half_life }
-            SortField.HURST       -> compareBy { it.hurst }
+            SortField.SENTIMENT   -> compareBy { sentimentEdge(it) }
             SortField.EXP_RETURN  -> compareBy { it.exp_return }
         }
         if (sortAsc) results.sortedWith(cmp) else results.sortedWith(cmp).reversed()
@@ -115,8 +127,8 @@ fun MainScreen(
             item {
                 ScanForm(
                     isScanning = isScanning,
-                    onScan     = { tickers, period, intv, start, end ->
-                        viewModel.startScan(tickers, period, intv, start, end)
+                    onScan     = { tickers, period, intv, start, end, basis ->
+                        viewModel.startScan(tickers, period, intv, start, end, basis)
                     },
                     onReset    = { viewModel.reset() },
                 )
@@ -149,6 +161,13 @@ fun MainScreen(
                         Spacer(Modifier.width(6.dp))
                         Text(s.message, color = TextSecondary, fontSize = 13.sp)
                     }
+                    enrichStatus?.let {
+                        Text(it, color = TextMuted, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    }
+                    if (!config.isConfigured) {
+                        Text("Connect tastytrade (⚙) for IV data and option trades.", color = TextMuted, fontSize = 11.sp,
+                            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    }
                 }
                 is ScanState.Error -> item {
                     Surface(
@@ -172,7 +191,7 @@ fun MainScreen(
                         sortAsc   = sortAsc,
                         onSort    = { field ->
                             if (sortField == field) sortAsc = !sortAsc
-                            else { sortField = field; sortAsc = false }
+                            else { sortField = field; sortAsc = field == SortField.CADF || field == SortField.HALF_LIFE }
                         },
                     )
                 }
@@ -181,6 +200,8 @@ fun MainScreen(
                     ResultCard(
                         index      = index + 1,
                         result     = result,
+                        insightX   = insights[result.x],
+                        insightY   = insights[result.y],
                         interval   = interval,
                         hasEndDate = endDate.isNotEmpty(),
                         onClick    = { viewModel.selectPair(result) },
@@ -213,9 +234,17 @@ fun MainScreen(
     selectedPair?.let { pair ->
         PairDetailSheet(
             pair      = pair,
+            insightX  = insights[pair.x],
+            insightY  = insights[pair.y],
             interval  = interval,
             endDate   = endDate,
+            canTrade  = config.isConfigured,
             onDismiss = { viewModel.selectPair(null) },
+            onBuildTrade = {
+                viewModel.buildTrade(pair)
+                viewModel.selectPair(null)
+                onNavigateToTrade()
+            },
             onBacktest = { request ->
                 viewModel.setPendingBacktest(request)
                 viewModel.selectPair(null)
@@ -226,7 +255,7 @@ fun MainScreen(
 
     // Settings dialog
     if (showSettings) {
-        SettingsDialog(onDismiss = { showSettings = false })
+        SettingsDialog(viewModel = viewModel, onDismiss = { showSettings = false })
     }
 }
 
@@ -249,7 +278,7 @@ private fun AppHeader() {
             )
             Text("Statistical Pairs Trading Scanner", color = TextSecondary, fontSize = 14.sp)
             Text(
-                "Kalman-filtered cointegration  •  Monte Carlo P(profit)  •  Hurst exponent",
+                "CADF + Johansen cointegration  •  tastytrade option spreads  •  news sentiment",
                 color    = TextMuted,
                 fontSize = 11.sp,
                 textAlign = TextAlign.Center,
@@ -265,7 +294,7 @@ private fun SortBar(
     onSort: (SortField) -> Unit,
 ) {
     Row(
-        modifier              = Modifier.fillMaxWidth(),
+        modifier              = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment     = Alignment.CenterVertically,
     ) {
