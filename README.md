@@ -1,6 +1,6 @@
 # OmniSpread
 
-**Statistical pairs-trading scanner for US and Indian equities, with tastytrade option spreads and news sentiment — runs on-device, no server required.**
+**Statistical pairs-trading scanner for S&P 100 stocks, with tastytrade option spreads and news sentiment — runs on-device, no server required.**
 
 OmniSpread screens every pair in a universe for cointegration using the same **v2** method as the [OmniSpread Python backend](https://github.com/somewisecrack/OmniSpread), adds per-ticker **news sentiment** (TickerVibe-style) and **tastytrade volatility data**, and turns a signal into a pair of **credit or debit vertical spreads** that you can dry-run and place from the phone.
 
@@ -12,7 +12,7 @@ OmniSpread screens every pair in a universe for cointegration using the same **v
 |---|---|
 | **v2 cointegration screen** | Johansen (`det_order=0`, `k_ar_diff=1`) must reject rank 0, **and** Engle–Granger in both orderings (larger p-value) must be < 0.05. Static Johansen hedge, raw or log prices. |
 | **Parity with Python** | ADF with AIC lag selection, MacKinnon p-values and Johansen are ported from statsmodels; unit tests check them against statsmodels on synthetic and real data. |
-| **Universes** | Mega Tech, Semis, Financials, Energy, Healthcare, Consumer, Sector ETFs, Nifty 50, or custom tickers. |
+| **Universe** | The S&P 100 (101 tickers, 5,050 pairs), or one of its GICS sectors. Downloads and pair screening run in parallel. |
 | **News sentiment per ticker** | Last 7 days of Google News RSS headlines, scored with an on-device finance lexicon and recency-weighted; shown on each result with the top headlines in the pair sheet. |
 | **tastytrade volatility** | IV index, IV rank and percentile, HV 30/60/90, **IV for every expiry**, next earnings date and industry (used for the same-industry flag). |
 | **Option spreads per leg** | Long leg → bullish vertical, short leg → bearish vertical. Credit vs debit is chosen per leg from IV rank and that expiry's IV against realised vol over a matching window. |
@@ -24,7 +24,7 @@ OmniSpread screens every pair in a universe for cointegration using the same **v
 ## How it works
 
 ### 1. Scan
-1. Prices: Yahoo Finance adjusted closes (tastytrade has no REST price history).
+1. Prices: Yahoo Finance adjusted closes (tastytrade has no REST price history). Berkshire is `BRK-B` on Yahoo and `BRK/B` on tastytrade; the app maps between them.
 2. If tastytrade is connected, `GET /market-metrics` is loaded for the universe first (industry, IV, earnings).
 3. For each pair: Johansen rank ≥ 1 → CADF p < 0.05 → β > 0 from the Johansen vector → spread `Y − β·X` → half-life → z over a half-life window → keep if |z| > 2.
 4. Results are ranked by CADF p-value, then |z|.
@@ -43,7 +43,7 @@ TickerVibe uses FinBERT; that model is ~440 MB, so the app uses a compact lexico
 | Credit vs debit | IVR ≥ 50 → credit; IVR < 25 → debit; otherwise credit if that expiry's IV > realised vol over the same horizon |
 | Credit strikes | OmniSpread `vol` rule: sell ~1 expected move OTM, choose the long strike (≤ 2.5 EM) with the best credit / max-loss |
 | Debit strikes | buy the strike nearest spot, sell ~1 expected move in the favourable direction |
-| Sizing | delta-dollars matched to the hedge (`qty·Px : Py`), largest size within $500 max loss per leg |
+| Sizing | contract counts whose delta-dollar ratio is closest to the hedge (`qty·Px : Py`), within a $1,000 max-loss budget for the pair |
 
 Expected move = spot × IV(expiry) × √(DTE/365). Quotes and Greeks come from `GET /market-data/by-type`.
 
@@ -78,6 +78,7 @@ Requires Android Studio (or its bundled JDK) and Android SDK 35.
 ```
 
 - `StatsParityTest` checks CADF p-values, Johansen statistics, rank, β, half-life and z against statsmodels 0.14.6 on 8 synthetic series and 91 real pairs × 2 price bases (fixtures in `app/src/test/resources`).
+- `Sp100ScanLiveTest` (skipped by default) scans the full S&P 100 from Yahoo and writes the passing pairs: `OMNISPREAD_SCAN_OUT=/tmp/sp100.tsv ./gradlew testDebugUnitTest --tests '*Sp100ScanLiveTest*' --rerun`. On 2026-10-09 (3y, raw) it matched the Python backend exactly (COP/MRK, GS/MO).
 - `TastytradeLiveTest` (read-only, skipped by default) builds a live plan and dry-runs it:
   `OMNISPREAD_TASTY_ENV=/path/to/.env ./gradlew testDebugUnitTest --tests '*TastytradeLiveTest*' -i`, where the file holds `TT_CLIENT_SECRET=`, `TT_REFRESH_TOKEN=` and optionally `TT_ENV=sandbox`.
 
@@ -90,7 +91,7 @@ app/src/main/java/com/example/omnispread/
 ├── data/
 │   ├── Stats.kt            # ADF/AIC, MacKinnon p-values, Johansen (statsmodels port)
 │   ├── OmniSpreadEngine.kt # v2 scan
-│   ├── Presets.kt          # ticker universes
+│   ├── Presets.kt          # S&P 100 constituents + sectors
 │   ├── TastytradeApi.kt    # OAuth, market metrics, chains, quotes, dry-run/orders
 │   ├── CredentialStore.kt  # Keystore-encrypted credentials
 │   ├── OptionStrategy.kt   # signal → credit/debit verticals, sizing
@@ -109,7 +110,9 @@ app/src/main/java/com/example/omnispread/
 - **Yahoo Finance** chart API is unofficial and can change.
 - **Google News RSS** is for personal, non-commercial use under Google's feed terms.
 - **tastytrade** REST quotes are for funded accounts; sandbox quotes are delayed.
-- Screening many pairs without multiple-testing correction will produce some false positives.
+- The S&P 100 list is a snapshot (October 2026) in `Presets.kt`; update it when constituents change.
+- GOOG/GOOGL are two share classes of one company and will usually pair with each other.
+- Screening 5,050 pairs without multiple-testing correction will produce some false positives.
 
 ---
 

@@ -18,7 +18,6 @@ import com.example.omnispread.data.TastytradeApi
 import com.example.omnispread.data.TickerInsight
 import com.example.omnispread.data.TickerVol
 import com.example.omnispread.data.YahooFinanceApi
-import com.example.omnispread.data.isUsTicker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -143,10 +142,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 // Industry / IV data for the whole universe first (one call per 50 symbols),
                 // so the scan can flag same-industry pairs.
-                val us = tickers.filter(::isUsTicker)
                 val vols: Map<String, TickerVol> = api()?.let { a ->
                     _scanState.value = ScanState.Scanning("Loading tastytrade metrics...")
-                    withContext(Dispatchers.IO) { runCatching { a.marketMetrics(us) }.getOrElse { emptyMap() } }
+                    withContext(Dispatchers.IO) { runCatching { a.marketMetrics(tickers) }.getOrElse { emptyMap() } }
                 } ?: emptyMap()
                 if (vols.isNotEmpty()) _insights.value = vols.mapValues { TickerInsight(it.key, vol = it.value) }
 

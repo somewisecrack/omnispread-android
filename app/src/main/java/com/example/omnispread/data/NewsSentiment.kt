@@ -30,13 +30,13 @@ object NewsSentiment {
     private const val RECENCY_HALF_LIFE_DAYS = 3.0
 
     fun analyze(symbol: String, companyName: String?): TickerSentiment {
-        val ticker = symbol.removeSuffix(".NS").removeSuffix(".BO")
+        val ticker = symbol.replace('-', '.')
         val name = companyName?.let(::cleanName)?.takeIf { it.length >= 3 }
         val query = buildString {
             if (name != null) append("\"$name\" OR ")
             append("\"$ticker stock\" when:${LOOKBACK_DAYS}d")
         }
-        val headlines = fetch(query, symbol.endsWith(".NS") || symbol.endsWith(".BO"))
+        val headlines = fetch(query)
             .map { it.copy(score = FinanceLexicon.score(it.title)) }
             .sortedByDescending { it.published }
             .take(MAX_HEADLINES)
@@ -61,8 +61,8 @@ object NewsSentiment {
         return TickerSentiment(symbol, query, score, label, pos, neg, headlines.size - pos - neg, headlines)
     }
 
-    private fun fetch(query: String, india: Boolean): List<Headline> {
-        val (hl, gl, ceid) = if (india) Triple("en-IN", "IN", "IN:en") else Triple("en-US", "US", "US:en")
+    private fun fetch(query: String): List<Headline> {
+        val (hl, gl, ceid) = Triple("en-US", "US", "US:en")
         val url = "https://news.google.com/rss/search".toHttpUrl().newBuilder()
             .addQueryParameter("q", query)
             .addQueryParameter("hl", hl).addQueryParameter("gl", gl).addQueryParameter("ceid", ceid)

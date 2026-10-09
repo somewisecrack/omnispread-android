@@ -139,7 +139,7 @@ fun ResultCard(
 @Composable
 fun TickerStrip(symbol: String, insight: TickerInsight?) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(symbol.removeSuffix(".NS"), color = TextSecondary, fontSize = 11.sp,
+        Text(symbol, color = TextSecondary, fontSize = 11.sp,
             fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(72.dp))
         val s = insight?.sentiment
         if (s == null) MiniTag("news…", TextMuted)

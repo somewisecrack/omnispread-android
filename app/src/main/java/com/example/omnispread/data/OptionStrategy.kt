@@ -3,13 +3,14 @@ package com.example.omnispread.data
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /** Tunables for turning a pair signal into option spreads. */
 data class StrategySettings(
-    /** Max loss budget per leg, in dollars. */
+    /** Max loss budget per leg, in dollars (the pair may use 2× this in total). */
     val riskPerLeg: Double = 500.0,
     /** Target holding horizon = halfLife × this, in trading days. */
     val horizonMultiple: Double = 1.5,
@@ -41,9 +42,6 @@ class OptionStrategy(
 
     fun plan(pair: PairResult, insights: Map<String, TickerInsight>, closes: Map<String, DoubleArray>, interval: String): PairTradePlan {
         val notes = mutableListOf<String>()
-        if (!isUsTicker(pair.x) || !isUsTicker(pair.y)) {
-            return PairTradePlan(pair.pair, pair.direction, null, null, listOf("Options are only supported for US tickers on tastytrade."))
-        }
         val bullX = pair.direction == "SHORT_SPREAD"   // SHORT_SPREAD = buy X, sell Y
         val hlDays = halfLifeDays(pair.half_life, interval)
         val target = ceil(hlDays * settings.horizonMultiple * 365.0 / 252.0).toInt().coerceIn(settings.minDte, settings.maxDte)
@@ -200,12 +198,18 @@ class OptionStrategy(
             return sizeAlone(x) to sizeAlone(y)
         }
         val ratio = pair.qty * x.spot / y.spot               // target X$ per Y$
-        var bestX = 1; var bestY = 1; var found = false
-        for (nY in 1..50) {
-            val nX = max(1, (ratio * nY * dY / dX).roundToInt())
-            if (nX * x.maxLoss <= settings.riskPerLeg && nY * y.maxLoss <= settings.riskPerLeg) { bestX = nX; bestY = nY; found = true }
+        val budget = 2 * settings.riskPerLeg                 // whole pair
+        // Closest delta-dollar ratio within the pair budget; ties → larger size.
+        var bestX = 1; var bestY = 1; var bestErr = Double.POSITIVE_INFINITY; var bestRisk = 0.0
+        for (nX in 1..30) for (nY in 1..30) {
+            val risk = nX * x.maxLoss + nY * y.maxLoss
+            if (risk > budget) continue
+            val err = abs(ln((nX * dX) / (nY * dY) / ratio))
+            if (err < bestErr - 1e-9 || (abs(err - bestErr) <= 1e-9 && risk > bestRisk)) {
+                bestX = nX; bestY = nY; bestErr = err; bestRisk = risk
+            }
         }
-        if (!found) notes += "Even one contract per leg exceeds the \$${settings.riskPerLeg.toInt()} risk budget; showing 1×1."
+        if (bestErr.isInfinite()) notes += "One contract per leg (\$${"%.0f".format(x.maxLoss + y.maxLoss)} max loss) exceeds the \$${budget.toInt()} pair budget; showing 1×1."
         val achieved = (bestX * dX) / (bestY * dY)
         notes += "Delta-dollar ratio X:Y = ${"%.2f".format(achieved)} (target ${"%.2f".format(ratio)} from hedge qty ${"%.3g".format(pair.qty)})."
         return scaled(x, bestX) to scaled(y, bestY)

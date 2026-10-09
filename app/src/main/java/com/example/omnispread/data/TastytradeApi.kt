@@ -101,10 +101,10 @@ class TastytradeApi(private val cfg: TastyConfig) {
     fun marketMetrics(symbols: List<String>): Map<String, TickerVol> {
         val out = mutableMapOf<String, TickerVol>()
         symbols.chunked(50).forEach { chunk ->
-            val items = get("/market-metrics", mapOf("symbols" to chunk.joinToString(","))).optJSONArray("items") ?: JSONArray()
+            val items = get("/market-metrics", mapOf("symbols" to chunk.joinToString(",") { tastySymbol(it) })).optJSONArray("items") ?: JSONArray()
             for (i in 0 until items.length()) {
                 val m = items.getJSONObject(i)
-                val sym = m.optString("symbol")
+                val sym = yahooSymbol(m.optString("symbol"))
                 val exps = m.optJSONArray("option-expiration-implied-volatilities") ?: JSONArray()
                 val expiries = (0 until exps.length()).mapNotNull { k ->
                     val e = exps.getJSONObject(k)
@@ -134,7 +134,7 @@ class TastytradeApi(private val cfg: TastyConfig) {
     // ── option chains & quotes ──────────────────────────────────────────────
 
     fun nestedChain(symbol: String): List<ChainExpiry> {
-        val items = get("/option-chains/$symbol/nested").optJSONArray("items") ?: return emptyList()
+        val items = get("/option-chains/${tastySymbol(symbol).replace("/", "%2F")}/nested").optJSONArray("items") ?: return emptyList()
         val chain = (0 until items.length()).map { items.getJSONObject(it) }
             .firstOrNull { it.optString("option-chain-type") == "Standard" } ?: items.optJSONObject(0) ?: return emptyList()
         val exps = chain.optJSONArray("expirations") ?: return emptyList()
@@ -154,7 +154,7 @@ class TastytradeApi(private val cfg: TastyConfig) {
     }
 
     fun equityPrice(symbol: String): Double? {
-        val items = get("/market-data/by-type", mapOf("equity" to symbol)).optJSONArray("items") ?: return null
+        val items = get("/market-data/by-type", mapOf("equity" to tastySymbol(symbol))).optJSONArray("items") ?: return null
         val q = items.optJSONObject(0) ?: return null
         return q.optString("mark").toDoubleOrNull() ?: q.optString("last").toDoubleOrNull()
     }

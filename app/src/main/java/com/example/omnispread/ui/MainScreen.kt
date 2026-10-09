@@ -43,7 +43,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.omnispread.data.BacktestRequest
 import com.example.omnispread.data.PairResult
-import com.example.omnispread.data.isUsTicker
 import com.example.omnispread.ui.theme.AccentBlue
 import com.example.omnispread.ui.theme.AccentCyan
 import com.example.omnispread.ui.theme.AccentGreen
@@ -239,7 +238,7 @@ fun MainScreen(
             insightY  = insights[pair.y],
             interval  = interval,
             endDate   = endDate,
-            canTrade  = config.isConfigured && isUsTicker(pair.x) && isUsTicker(pair.y),
+            canTrade  = config.isConfigured,
             onDismiss = { viewModel.selectPair(null) },
             onBuildTrade = {
                 viewModel.buildTrade(pair)

@@ -25,8 +25,6 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,10 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.omnispread.data.PRESETS
@@ -86,7 +80,6 @@ fun ScanForm(
     onReset: () -> Unit,
 ) {
     var presetKey by remember { mutableStateOf(PRESETS.first().key) }
-    var custom    by remember { mutableStateOf("") }
     var basis     by remember { mutableStateOf("raw") }
     var period   by remember { mutableStateOf("3y") }
     var interval by remember { mutableStateOf("1d") }
@@ -116,11 +109,9 @@ fun ScanForm(
             modifier            = Modifier.fillMaxWidth().padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // Universe
-            val preset = PRESETS.firstOrNull { it.key == presetKey }
-            val tickers = if (presetKey == "custom")
-                custom.split(Regex("[^A-Za-z0-9.^&-]+")).map { it.trim().uppercase() }.filter { it.isNotEmpty() }.distinct()
-            else preset?.tickers.orEmpty()
+            // Universe (S&P 100 or one of its sectors)
+            val preset = PRESETS.firstOrNull { it.key == presetKey } ?: PRESETS.first()
+            val tickers = preset.tickers
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("UNIVERSE", color = TextSecondary, fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold, letterSpacing = 0.06.sp)
@@ -129,32 +120,8 @@ fun ScanForm(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     PRESETS.forEach { p -> ToggleChip(label = p.label, selected = presetKey == p.key, onClick = { presetKey = p.key }) }
-                    ToggleChip(label = "Custom", selected = presetKey == "custom", onClick = { presetKey = "custom" })
                 }
-                AnimatedVisibility(visible = presetKey == "custom") {
-                    OutlinedTextField(
-                        value = custom,
-                        onValueChange = { custom = it },
-                        placeholder = { Text("e.g. KO, PEP, XOM, CVX", fontSize = 12.sp) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Characters,
-                            autoCorrectEnabled = false,
-                            keyboardType = KeyboardType.Ascii,
-                            imeAction = ImeAction.Done,
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary,
-                            focusedBorderColor = AccentBlue, unfocusedBorderColor = Border,
-                        ),
-                    )
-                }
-                Text(
-                    "${tickers.size} tickers • ${tickers.size * (tickers.size - 1) / 2} pairs" +
-                        if (preset?.us == false) " • scan only (no tastytrade options)" else "",
-                    color = TextMuted, fontSize = 12.sp,
-                )
+                Text("${tickers.size} tickers • ${tickers.size * (tickers.size - 1) / 2} pairs", color = TextMuted, fontSize = 12.sp)
             }
 
             // Price basis

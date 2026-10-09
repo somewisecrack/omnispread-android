@@ -187,7 +187,7 @@ fun PairDetailSheet(
                 modifier = Modifier.fillMaxWidth(),
                 colors   = ButtonDefaults.buttonColors(containerColor = AccentBlue, contentColor = TextPrimary),
             ) {
-                Text(if (canTrade) "Build options trade" else "Options: connect tastytrade (US tickers only)", fontWeight = FontWeight.SemiBold)
+                Text(if (canTrade) "Build options trade" else "Options: connect tastytrade in Settings", fontWeight = FontWeight.SemiBold)
             }
 
             // Backtest button (only when end date is available)

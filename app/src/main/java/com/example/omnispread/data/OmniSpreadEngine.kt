@@ -40,6 +40,7 @@ class OmniSpreadEngine(
         const val Z_SCORE_LIMIT = 2.0
         const val CADF_P_VALUE = 0.05
         const val MIN_QTY = 1e-6
+        private const val FETCH_THREADS = 6
     }
 
     private class Screened(
@@ -61,23 +62,38 @@ class OmniSpreadEngine(
         val startTs = startDate?.let { fmt.parse(it)?.time?.div(1000) }
         val endTs = endDate?.let { fmt.parse(it)?.time?.div(1000)?.plus(86_399) }
 
-        val data = linkedMapOf<String, Pair<LongArray, DoubleArray>>()
-        for ((i, t) in tickers.withIndex()) {
-            onProgress("Fetching ${i + 1}/${tickers.size}: $t")
-            val raw = YahooFinanceApi.fetchPrices(t, range, interval)
-                .filter { (ts, _) -> (startTs == null || ts >= startTs) && (endTs == null || ts <= endTs) }
-            if (raw.size >= 51) data[t] = raw.map { it.first }.toLongArray() to raw.map { it.second }.toDoubleArray()
-            if (i % 5 == 4) Thread.sleep(300)
-        }
-        val active = tickers.filter { it in data }
+        // Download in parallel (a few at a time to stay polite to Yahoo).
+        val data = java.util.concurrent.ConcurrentHashMap<String, Pair<LongArray, DoubleArray>>()
+        val fetched = java.util.concurrent.atomic.AtomicInteger(0)
+        val io = java.util.concurrent.Executors.newFixedThreadPool(FETCH_THREADS)
+        try {
+            tickers.map { t ->
+                io.submit {
+                    val raw = YahooFinanceApi.fetchPrices(t, range, interval)
+                        .filter { (ts, _) -> (startTs == null || ts >= startTs) && (endTs == null || ts <= endTs) }
+                    if (raw.size >= 51) data[t] = raw.map { it.first }.toLongArray() to raw.map { it.second }.toDoubleArray()
+                    onProgress("Fetched ${fetched.incrementAndGet()}/${tickers.size} price series...")
+                }
+            }.forEach { it.get() }
+        } finally { io.shutdown() }
+        val active = tickers.filter { data.containsKey(it) }
         if (active.size < 2) return ScanOutput(emptyList(), data.mapValues { it.value.second })
 
         val combos = buildList { for (i in active.indices) for (j in i + 1 until active.size) add(active[i] to active[j]) }
-        onProgress("Screening ${combos.size} pairs (CADF + Johansen)...")
-        val results = combos.mapIndexedNotNull { idx, (x, y) ->
-            if (idx % 25 == 0) onProgress("Screening pair ${idx + 1}/${combos.size}...")
-            try { screenPair(x, data[x]!!, y, data[y]!!)?.let(::buildResult) } catch (_: Exception) { null }
-        }.sortedWith(compareBy<PairResult> { it.cadf_pvalue }.thenByDescending { abs(it.z_score) })
+        onProgress("Screening ${combos.size} pairs (Johansen → CADF)...")
+        val done = java.util.concurrent.atomic.AtomicInteger(0)
+        val cpu = java.util.concurrent.Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors().coerceIn(2, 8))
+        val screened = try {
+            combos.map { (x, y) ->
+                cpu.submit<PairResult?> {
+                    val r = try { screenPair(x, data[x]!!, y, data[y]!!)?.let(::buildResult) } catch (_: Exception) { null }
+                    val n = done.incrementAndGet()
+                    if (n % 100 == 0) onProgress("Screened $n/${combos.size} pairs...")
+                    r
+                }
+            }.mapNotNull { it.get() }
+        } finally { cpu.shutdown() }
+        val results = screened.sortedWith(compareBy<PairResult> { it.cadf_pvalue }.thenByDescending { abs(it.z_score) })
 
         return ScanOutput(results, data.mapValues { it.value.second })
     }
@@ -167,7 +183,7 @@ class OmniSpreadEngine(
         }
 
         return PairResult(
-            pair = "${label(s.x)}/${label(s.y)}",
+            pair = "${s.x}/${s.y}",
             x = s.x, y = s.y,
             qty = s.qty, beta = s.beta,
             direction = s.direction, combo = s.combo,
@@ -204,7 +220,6 @@ class OmniSpreadEngine(
     }
 
     private fun isClose(a: Double, b: Double) = abs(a - b) <= 1e-8 + 1e-5 * abs(b)
-    private fun label(t: String) = t.removeSuffix(".NS").removeSuffix(".BO")
     private fun fmtPx(v: Double) = if (abs(v) >= 1) "%.2f".format(v) else "%.4g".format(v)
     private fun dayFormat() = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
 }
