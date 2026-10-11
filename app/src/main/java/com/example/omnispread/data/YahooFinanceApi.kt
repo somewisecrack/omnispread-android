@@ -1,24 +1,26 @@
 package com.example.omnispread.data
 
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
 
 object YahooFinanceApi {
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .build()
+    private val client = Net.client(connectSecs = 15, readSecs = 60)
 
     /**
      * Fetches adjusted-close prices for [symbol] from Yahoo Finance chart API.
      * Returns a list of (unix_timestamp_seconds, price) sorted by timestamp.
      */
-    fun fetchPrices(symbol: String, range: String = "3y", interval: String = "1d"): List<Pair<Long, Double>> {
-        val url = "https://query1.finance.yahoo.com/v8/finance/chart/$symbol" +
-            "?range=$range&interval=$interval&events=history&includeAdjustedClose=true"
+    fun fetchPrices(symbol: String, range: String = "3y", interval: String = "1d"): List<Pair<Long, Double>> =
+        fetchUrl("https://query1.finance.yahoo.com/v8/finance/chart/$symbol" +
+            "?range=$range&interval=$interval&events=history&includeAdjustedClose=true")
+
+    /** Prices between two unix timestamps (seconds), e.g. for forward backtests from a past date. */
+    fun fetchPricesBetween(symbol: String, startSec: Long, endSec: Long, interval: String = "1d"): List<Pair<Long, Double>> =
+        fetchUrl("https://query1.finance.yahoo.com/v8/finance/chart/$symbol" +
+            "?period1=$startSec&period2=$endSec&interval=$interval&events=history&includeAdjustedClose=true")
+
+    private fun fetchUrl(url: String): List<Pair<Long, Double>> {
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
@@ -52,9 +54,20 @@ object YahooFinanceApi {
                     .getJSONArray("close")
             }
 
+            // Intraday responses carry each day's regular-session window. Yahoo also returns a bar
+            // stamped exactly at the session close (e.g. 16:00 ET, or 13:00 on half-days); yfinance —
+            // which the OmniSpread/TastySpread backends use — drops it, so drop it here too.
+            val sessionEnds = HashSet<Long>()
+            result.optJSONObject("meta")?.optJSONArray("tradingPeriods")?.let { days ->
+                for (d in 0 until days.length()) {
+                    val periods = days.optJSONArray(d) ?: continue
+                    for (k in 0 until periods.length()) periods.optJSONObject(k)?.optLong("end")?.let(sessionEnds::add)
+                }
+            }
+
             val pairs = mutableListOf<Pair<Long, Double>>()
             for (i in 0 until timestamps.length()) {
-                if (priceArr.isNull(i)) continue
+                if (priceArr.isNull(i) || timestamps.getLong(i) in sessionEnds) continue
                 val price = priceArr.getDouble(i)
                 if (price.isFinite() && price > 0) {
                     pairs.add(timestamps.getLong(i) to price)

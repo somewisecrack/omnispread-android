@@ -94,4 +94,17 @@ class StatsParityTest {
         assertEquals("Apple", NewsSentiment.cleanName("Apple Inc."))
         assertEquals("Exxon Mobil", NewsSentiment.cleanName("Exxon Mobil Corporation"))
     }
+
+    @Test
+    fun newsNamesAndHeadlineMatching() {
+        assertEquals(SP100.keys, NEWS_NAMES.keys)
+        val deere = NEWS_NAMES.getValue("DE").split("|")
+        assertTrue(NewsSentiment.mentions("Deere (DE) Stock Looks Undervalued", deere))
+        assertTrue(!NewsSentiment.mentions("SAP SE (SAP.DE) stock price, news, quote", deere))
+        val oracle = NEWS_NAMES.getValue("ORCL").split("|")
+        assertTrue(NewsSentiment.mentions("Why Are Oracle (NYSE:ORCL) Stocks Falling", oracle))
+        assertTrue(!NewsSentiment.mentions("Twin Oracles Point tour", oracle))
+        assertTrue(NewsSentiment.mentions("AT&T plans to retire its landline network", NEWS_NAMES.getValue("T").split("|")))
+        assertTrue(NewsSentiment.mentions("Google Maps adds gas prices", NEWS_NAMES.getValue("GOOGL").split("|")))
+    }
 }

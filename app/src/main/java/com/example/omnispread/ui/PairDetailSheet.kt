@@ -245,7 +245,7 @@ private fun InsightCard(symbol: String, insight: TickerInsight?) {
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     MiniTag(s.label, sentimentColor(s.label))
-                    Text("score ${String.format("%+.2f", s.score)} • ${s.positive}↑ ${s.negative}↓ ${s.neutral}• of ${s.headlines.size} headlines (7d)",
+                    Text("score ${String.format("%+.2f", s.score)} • ${s.positive}↑ ${s.negative}↓ ${s.neutral}• of ${s.headlines.size} headline${if (s.headlines.size == 1) "" else "s"} (last 24h)",
                         color = TextMuted, fontSize = 11.sp)
                 }
                 s.headlines.take(5).forEach { h ->

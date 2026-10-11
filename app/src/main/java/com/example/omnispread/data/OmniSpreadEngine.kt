@@ -20,7 +20,7 @@ data class ScanOutput(
 /**
  * OmniSpread v2 screen (port of the Python backend's `_screen_pair_v2`):
  *  1. Johansen (det_order=0, k_ar_diff=1) must reject rank 0 (rank 1 or 2 accepted).
- *  2. Engle–Granger in both orderings; the larger p-value must be < 0.05.
+ *  2. Engle–Granger in both orderings; the larger p-value must be < 0.10 (OmniSpread uses 0.05).
  *  3. Static hedge from the Johansen vector; spread = Y − β·X on the chosen price basis.
  *  4. Half-life from spread changes on lagged spread; z over a half-life rolling window; |z| > 2.
  * Pairs are ranked by CADF p-value, then |z| descending.
@@ -38,7 +38,7 @@ class OmniSpreadEngine(
 
     companion object {
         const val Z_SCORE_LIMIT = 2.0
-        const val CADF_P_VALUE = 0.05
+        const val CADF_P_VALUE = 0.10
         const val MIN_QTY = 1e-6
         private const val FETCH_THREADS = 6
     }

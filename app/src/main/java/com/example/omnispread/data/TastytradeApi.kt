@@ -2,13 +2,11 @@ package com.example.omnispread.data
 
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 class TastyApiException(val status: Int, message: String) : IOException(message)
 
@@ -31,10 +29,7 @@ data class OptionQuote(
 class TastytradeApi(private val cfg: TastyConfig) {
 
     private val base = if (cfg.sandbox) "https://api.cert.tastyworks.com" else "https://api.tastyworks.com"
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .build()
+    private val client = Net.client(connectSecs = 15, readSecs = 30)
 
     private var token: String? = null
     private var tokenExpiry = 0L

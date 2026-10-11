@@ -143,7 +143,7 @@ fun TickerStrip(symbol: String, insight: TickerInsight?) {
             fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(72.dp))
         val s = insight?.sentiment
         if (s == null) MiniTag("news…", TextMuted)
-        else MiniTag("${s.label} ${if (s.headlines.isEmpty()) "" else String.format("%+.2f", s.score)}".trim(), sentimentColor(s.label))
+        else MiniTag(if (s.headlines.isEmpty()) "No news 24h" else "${s.label} ${String.format("%+.2f", s.score)} · ${s.headlines.size}", sentimentColor(s.label))
         insight?.vol?.ivRank?.let { MiniTag("IVR ${it.toInt()}", if (it >= 50) AccentYellow else if (it < 25) AccentCyan else TextSecondary) }
         insight?.vol?.ivIndex?.let { iv ->
             val rv = insight.realizedVol21 ?: insight.vol.hv30

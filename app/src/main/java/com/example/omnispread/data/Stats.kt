@@ -107,15 +107,39 @@ object Stats {
             return X to y
         }
 
-        // AIC search on the common sample defined by maxlag.
+        // AIC search on the common sample defined by maxlag. Every candidate model uses the leading
+        // columns of the same design, so build X'X, X'y and y'y once and solve each k×k block
+        // (the residual sum of squares is y'y − b'X'y) instead of refitting from scratch.
+        val (Xf, yf) = design(maxlag, maxlag)
+        val K = maxlag + 1
+        val rows = yf.size
+        val G = Array(K) { DoubleArray(K) }
+        val h = DoubleArray(K)
+        var yy = 0.0
+        for (r in 0 until rows) {
+            val xr = Xf[r]; val yr = yf[r]
+            yy += yr * yr
+            for (i in 0 until K) {
+                val xi = xr[i]
+                h[i] += xi * yr
+                val gi = G[i]
+                for (j in i until K) gi[j] += xi * xr[j]
+            }
+        }
+        for (i in 0 until K) for (j in 0 until i) G[i][j] = G[j][i]
+
         var bestLag = 0
         var bestAic = Double.POSITIVE_INFINITY
+        val n = rows.toDouble()
         for (lags in 0..maxlag) {
-            val (X, y) = design(lags, maxlag)
-            val fit = ols(X, y) ?: continue
-            val n = y.size.toDouble()
-            val llf = -n / 2.0 * (ln(2.0 * Math.PI) + ln(fit.ssr / n) + 1.0)
-            val aic = -2.0 * llf + 2.0 * (lags + 1)
+            val k = lags + 1
+            val inv = invert(Array(k) { i -> DoubleArray(k) { j -> G[i][j] } }) ?: continue
+            var bh = 0.0
+            for (i in 0 until k) { var bi = 0.0; for (j in 0 until k) bi += inv[i][j] * h[j]; bh += bi * h[i] }
+            val ssr = yy - bh
+            if (ssr <= 0) continue
+            val llf = -n / 2.0 * (ln(2.0 * Math.PI) + ln(ssr / n) + 1.0)
+            val aic = -2.0 * llf + 2.0 * k
             if (aic < bestAic) { bestAic = aic; bestLag = lags }
         }
 

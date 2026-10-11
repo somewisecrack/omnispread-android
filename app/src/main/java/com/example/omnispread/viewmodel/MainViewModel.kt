@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.omnispread.data.BacktestRequest
 import com.example.omnispread.data.CredentialStore
 import com.example.omnispread.data.DryRunResult
+import com.example.omnispread.data.NEWS_NAMES
 import com.example.omnispread.data.NewsSentiment
 import com.example.omnispread.data.OmniSpreadEngine
 import com.example.omnispread.data.OptionStrategy
@@ -178,7 +179,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             symbols.map { sym ->
                 async {
                     gate.withPermit {
-                        val sentiment = runCatching { NewsSentiment.analyze(sym, YahooFinanceApi.fetchName(sym)) }.getOrNull()
+                        val name = if (sym in NEWS_NAMES) null else YahooFinanceApi.fetchName(sym)
+                        val sentiment = runCatching { NewsSentiment.analyze(sym, name) }.getOrNull()
                         val rv = if (interval == "1d") closes[sym]?.let { Stats.realizedVolPct(it, 21) }?.takeIf { it.isFinite() } else null
                         _insights.update { m ->
                             val cur = m[sym] ?: TickerInsight(sym)
@@ -200,7 +202,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _tradeState.value = try {
                 val plan = withContext(Dispatchers.IO) {
-                    OptionStrategy(a, settings).plan(pair, _insights.value, closes, _currentInterval.value)
+                    // Realised-vol matching assumes daily closes; intraday scans fall back to tastytrade HV.
+                    val dailyCloses = if (_currentInterval.value == "1d") closes else emptyMap()
+                    OptionStrategy(a, settings).plan(pair, _insights.value, dailyCloses, _currentInterval.value)
                 }
                 TradeState.Ready(plan)
             } catch (e: Exception) {

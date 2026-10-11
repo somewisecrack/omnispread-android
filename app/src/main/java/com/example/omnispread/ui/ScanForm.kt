@@ -62,7 +62,7 @@ private val PERIODS = listOf(
 private fun intervalOptionsFor(period: String, spanDays: Int?): List<String> = when {
     period == "60d"    -> listOf("15m", "30m")
     period == "6mo"    -> listOf("1h", "1d")
-    period == "1y"     -> listOf("1d")
+    period == "1y"     -> listOf("1h", "1d")
     period == "custom" -> when {
         spanDays == null -> listOf("1d")
         spanDays <= 60   -> listOf("15m", "30m")

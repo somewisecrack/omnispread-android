@@ -10,10 +10,10 @@ OmniSpread screens every pair in a universe for cointegration using the same **v
 
 | Feature | Details |
 |---|---|
-| **v2 cointegration screen** | Johansen (`det_order=0`, `k_ar_diff=1`) must reject rank 0, **and** Engle–Granger in both orderings (larger p-value) must be < 0.05. Static Johansen hedge, raw or log prices. |
+| **v2 cointegration screen** | Johansen (`det_order=0`, `k_ar_diff=1`) must reject rank 0, **and** Engle–Granger in both orderings (larger p-value) must be **< 0.10** (OmniSpread uses 0.05). Static Johansen hedge, raw or log prices. |
 | **Parity with Python** | ADF with AIC lag selection, MacKinnon p-values and Johansen are ported from statsmodels; unit tests check them against statsmodels on synthetic and real data. |
 | **Universe** | The S&P 100 (101 tickers, 5,050 pairs), or one of its GICS sectors. Downloads and pair screening run in parallel. |
-| **News sentiment per ticker** | Last 7 days of Google News RSS headlines, scored with an on-device finance lexicon and recency-weighted; shown on each result with the top headlines in the pair sheet. |
+| **News sentiment per ticker** | Google News headlines from the **last 24 hours** that name the company (curated names for every S&P 100 ticker), scored with an on-device finance lexicon and recency-weighted; each result shows the label, score and headline count. |
 | **tastytrade volatility** | IV index, IV rank and percentile, HV 30/60/90, **IV for every expiry**, next earnings date and industry (used for the same-industry flag). |
 | **Option spreads per leg** | Long leg → bullish vertical, short leg → bearish vertical. Credit vs debit is chosen per leg from IV rank and that expiry's IV against realised vol over a matching window. |
 | **Order flow** | Dry-run both legs (buying-power effect, fees, warnings), then place two Day limit orders at mid after an explicit confirmation. Sandbox or production. |
@@ -26,13 +26,13 @@ OmniSpread screens every pair in a universe for cointegration using the same **v
 ### 1. Scan
 1. Prices: Yahoo Finance adjusted closes (tastytrade has no REST price history). Berkshire is `BRK-B` on Yahoo and `BRK/B` on tastytrade; the app maps between them.
 2. If tastytrade is connected, `GET /market-metrics` is loaded for the universe first (industry, IV, earnings).
-3. For each pair: Johansen rank ≥ 1 → CADF p < 0.05 → β > 0 from the Johansen vector → spread `Y − β·X` → half-life → z over a half-life window → keep if |z| > 2.
+3. For each pair: Johansen rank ≥ 1 → CADF p < 0.10 → β > 0 from the Johansen vector → spread `Y − β·X` → half-life → z over a half-life window → keep if |z| > 2.
 4. Results are ranked by CADF p-value, then |z|.
 
 `qty` is always X shares per one Y share. `SHORT_SPREAD` = buy X / sell Y, `LONG_SPREAD` = sell X / buy Y.
 
 ### 2. Sentiment
-For every ticker in a result: company name from Yahoo → Google News RSS query `"<name>" OR "<TICKER> stock" when:7d` → each headline scored −1…+1 → recency-weighted mean (3-day half-life). Bullish > +0.15, Bearish < −0.15. The **Sentiment Δ** sort ranks pairs where the news favours the signal (long-leg score minus short-leg score).
+For every ticker in a result: curated company name(s) → Google News RSS query `"<name>" (stock OR shares OR earnings OR analyst OR price OR investors) when:1d` → keep headlines from the last 24 h whose title names the company → each scored −1…+1 → recency-weighted mean (8-hour half-life). Bullish > +0.15, Bearish < −0.15. The **Sentiment Δ** sort ranks pairs where the news favours the signal (long-leg score minus short-leg score).
 
 TickerVibe uses FinBERT; that model is ~440 MB, so the app uses a compact lexicon with negation handling instead. Treat the score as a rough news-tone flag.
 

@@ -1,53 +1,52 @@
 package com.example.omnispread.data
 
 import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.text.SimpleDateFormat
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 import kotlin.math.exp
 import kotlin.math.ln
 
 /**
- * Headline sentiment per ticker, following TickerVibe's approach: headlines from the
- * free Google News RSS search (no API key), scored per headline and averaged.
+ * Headline sentiment per ticker over the last 24 hours (TickerVibe approach): Google News RSS
+ * search (free, no key) restricted to finance wording, keeping only headlines published in the
+ * last 24 h whose title names the company; each headline scored, then a recency-weighted mean.
  *
  * TickerVibe scores with FinBERT; that model is ~440 MB, so on-device we use a compact
  * finance lexicon with negation handling ([FinanceLexicon]). Scores are -1 … +1.
  */
 object NewsSentiment {
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .build()
+    private val client = Net.client(connectSecs = 10, readSecs = 20)
 
-    private const val LOOKBACK_DAYS = 7
+    const val LOOKBACK_HOURS = 24
     private const val MAX_HEADLINES = 40
-    private const val RECENCY_HALF_LIFE_DAYS = 3.0
+    private const val RECENCY_HALF_LIFE_HOURS = 8.0
+    private const val FINANCE_TERMS = "(stock OR shares OR earnings OR analyst OR price OR investors)"
 
     fun analyze(symbol: String, companyName: String?): TickerSentiment {
-        val ticker = symbol.replace('-', '.')
-        val name = companyName?.let(::cleanName)?.takeIf { it.length >= 3 }
-        val query = buildString {
-            if (name != null) append("\"$name\" OR ")
-            append("\"$ticker stock\" when:${LOOKBACK_DAYS}d")
-        }
+        val aliases = (NEWS_NAMES[symbol]?.split("|") ?: listOfNotNull(companyName?.let(::cleanName)))
+            .filter { it.length >= 2 }
+            .ifEmpty { listOf(symbol) }
+        val who = aliases.joinToString(" OR ") { "\"$it\"" }
+        val query = (if (aliases.size > 1) "($who)" else who) + " $FINANCE_TERMS when:1d"
+
+        val now = System.currentTimeMillis()
+        val cutoff = now - LOOKBACK_HOURS * 3_600_000L
         val headlines = fetch(query)
+            .filter { it.published >= cutoff && mentions(it.title, aliases) }
             .map { it.copy(score = FinanceLexicon.score(it.title)) }
             .sortedByDescending { it.published }
             .take(MAX_HEADLINES)
 
         if (headlines.isEmpty()) return TickerSentiment(symbol, query, 0.0, "No news", 0, 0, 0, emptyList())
 
-        val now = System.currentTimeMillis()
         var wSum = 0.0; var sSum = 0.0
         headlines.forEach { h ->
-            val ageDays = ((now - h.published).coerceAtLeast(0)) / 86_400_000.0
-            val w = exp(-ln(2.0) * ageDays / RECENCY_HALF_LIFE_DAYS)
+            val ageHours = ((now - h.published).coerceAtLeast(0)) / 3_600_000.0
+            val w = exp(-ln(2.0) * ageHours / RECENCY_HALF_LIFE_HOURS)
             wSum += w; sSum += w * h.score
         }
         val score = if (wSum > 0) sSum / wSum else 0.0
@@ -71,6 +70,12 @@ object NewsSentiment {
         val xml = try { client.newCall(req).execute().use { if (it.isSuccessful) it.body?.string() else null } } catch (_: Exception) { null }
             ?: return emptyList()
         return parseRss(xml)
+    }
+
+    /** True if the title contains any alias as a whole word (case-insensitive). */
+    internal fun mentions(title: String, aliases: List<String>): Boolean {
+        val t = title.lowercase()
+        return aliases.any { a -> Regex("(?<![a-z0-9])" + Regex.escape(a.lowercase()) + "(?![a-z0-9])").containsMatchIn(t) }
     }
 
     internal fun parseRss(xml: String): List<Headline> {

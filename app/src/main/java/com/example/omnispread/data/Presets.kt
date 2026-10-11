@@ -70,3 +70,36 @@ fun tastySymbol(t: String) = t.replace('-', '/')
 
 /** tastytrade "BRK/B" → Yahoo "BRK-B". */
 fun yahooSymbol(t: String) = t.replace('/', '-')
+
+/**
+ * Short company names ("A|B" = aliases) for news searches and headline matching. A ticker alone
+ * ("DE", "KO", "T") matches too much unrelated news, so headlines must name the company.
+ */
+val NEWS_NAMES: Map<String, String> = mapOf(
+    "AAPL" to "Apple", "ABBV" to "AbbVie", "ABT" to "Abbott", "ACN" to "Accenture", "ADBE" to "Adobe",
+    "AMAT" to "Applied Materials", "AMD" to "AMD|Advanced Micro Devices", "AMGN" to "Amgen",
+    "AMT" to "American Tower", "AMZN" to "Amazon", "ANET" to "Arista", "AVGO" to "Broadcom",
+    "AXP" to "American Express", "BA" to "Boeing", "BAC" to "Bank of America",
+    "BKNG" to "Booking Holdings|Booking.com", "BLK" to "BlackRock", "BMY" to "Bristol Myers|Bristol-Myers",
+    "BNY" to "BNY Mellon|BNY", "BRK-B" to "Berkshire Hathaway|Berkshire", "C" to "Citigroup",
+    "CAT" to "Caterpillar", "CMCSA" to "Comcast", "COF" to "Capital One", "COP" to "ConocoPhillips",
+    "COST" to "Costco", "CRM" to "Salesforce", "CSCO" to "Cisco", "CVS" to "CVS Health", "CVX" to "Chevron",
+    "DE" to "Deere", "DELL" to "Dell", "DHR" to "Danaher", "DIS" to "Disney", "DUK" to "Duke Energy",
+    "EMR" to "Emerson", "FDX" to "FedEx", "GD" to "General Dynamics",
+    "GE" to "GE Aerospace|General Electric", "GEV" to "GE Vernova", "GILD" to "Gilead",
+    "GM" to "General Motors", "GOOG" to "Alphabet|Google", "GOOGL" to "Alphabet|Google",
+    "GS" to "Goldman Sachs", "HD" to "Home Depot", "IBM" to "IBM", "INTC" to "Intel", "INTU" to "Intuit",
+    "ISRG" to "Intuitive Surgical", "JNJ" to "Johnson & Johnson", "JPM" to "JPMorgan|JP Morgan",
+    "KO" to "Coca-Cola", "LIN" to "Linde", "LLY" to "Eli Lilly|Lilly", "LMT" to "Lockheed Martin",
+    "LOW" to "Lowe's", "LRCX" to "Lam Research", "MA" to "Mastercard", "MCD" to "McDonald's",
+    "MDLZ" to "Mondelez|Mondelēz", "MDT" to "Medtronic", "META" to "Meta Platforms|Meta", "MMM" to "3M",
+    "MO" to "Altria", "MRK" to "Merck", "MS" to "Morgan Stanley", "MSFT" to "Microsoft", "MU" to "Micron",
+    "NEE" to "NextEra Energy", "NFLX" to "Netflix", "NOW" to "ServiceNow", "NVDA" to "Nvidia",
+    "ORCL" to "Oracle", "PANW" to "Palo Alto Networks", "PEP" to "PepsiCo", "PFE" to "Pfizer",
+    "PG" to "Procter & Gamble|P&G", "PLTR" to "Palantir", "PM" to "Philip Morris", "QCOM" to "Qualcomm",
+    "RTX" to "RTX", "SBUX" to "Starbucks", "SCHW" to "Charles Schwab|Schwab", "SNDK" to "Sandisk",
+    "SO" to "Southern Company", "T" to "AT&T", "TMO" to "Thermo Fisher", "TMUS" to "T-Mobile",
+    "TSLA" to "Tesla", "TXN" to "Texas Instruments", "UBER" to "Uber", "UNH" to "UnitedHealth",
+    "UNP" to "Union Pacific", "UPS" to "UPS", "USB" to "U.S. Bancorp|US Bancorp", "V" to "Visa",
+    "VZ" to "Verizon", "WFC" to "Wells Fargo", "WMT" to "Walmart", "XOM" to "Exxon|ExxonMobil",
+)

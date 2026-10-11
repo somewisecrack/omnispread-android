@@ -16,8 +16,9 @@ class Sp100ScanLiveTest {
         assumeTrue("set OMNISPREAD_SCAN_OUT to run", out != null)
         val basis = System.getenv("OMNISPREAD_BASIS") ?: "raw"
         val period = System.getenv("OMNISPREAD_PERIOD") ?: "3y"
+        val interval = System.getenv("OMNISPREAD_INTERVAL") ?: "1d"
         val t0 = System.currentTimeMillis()
-        val res = OmniSpreadEngine(SP100.keys.toList(), period = period, priceBasis = basis).runScan()
+        val res = OmniSpreadEngine(SP100.keys.toList(), period = period, interval = interval, priceBasis = basis).runScan()
         val secs = (System.currentTimeMillis() - t0) / 1000.0
         File(out!!).writeText(buildString {
             appendLine("# ${res.closes.size} series, ${res.results.size} pairs, ${"%.1f".format(secs)}s")

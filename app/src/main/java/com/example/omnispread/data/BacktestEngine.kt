@@ -18,20 +18,12 @@ object BacktestEngine {
         val tradingDays = max(3, request.half_life / barsPerDay + 3)
         val calendarDays = minOf(370, tradingDays * 3 + 10)
 
-        // Build date range: start = endDate from scan, end = endDate + calendarDays
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-        val startCal = java.util.Calendar.getInstance().apply { time = sdf.parse(request.end_date) ?: return BacktestResult(status = "failed", error = "Invalid end_date") }
-        startCal.add(java.util.Calendar.DAY_OF_YEAR, calendarDays)
-        val endStr = sdf.format(startCal.time)
-
-        // Fetch forward prices for both tickers
-        val xPrices = YahooFinanceApi.fetchPriceMap(request.x, "1mo", request.interval)
-            .let { if (it.size < 2) YahooFinanceApi.fetchPrices(request.x, "1mo", request.interval) else null }
-        // We use a different approach: fetch a range explicitly via timestamps
-        // Yahoo Finance API doesn't support date range in the chart endpoint easily for short intervals,
-        // so we fetch recent 60d and filter
-        val xRaw = YahooFinanceApi.fetchPrices(request.x, "60d", request.interval)
-        val yRaw = YahooFinanceApi.fetchPrices(request.y, "60d", request.interval)
+        // Forward window: from the scan end date (00:00 UTC) for `calendarDays` days.
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+        val startSec = (sdf.parse(request.end_date) ?: return BacktestResult(status = "failed", error = "Invalid end_date")).time / 1000
+        val endSec = startSec + calendarDays * 86_400L
+        val xRaw = YahooFinanceApi.fetchPricesBetween(request.x, startSec, endSec, request.interval).filter { it.first >= startSec }
+        val yRaw = YahooFinanceApi.fetchPricesBetween(request.y, startSec, endSec, request.interval).filter { it.first >= startSec }
 
         if (xRaw.size < 2 || yRaw.size < 2) {
             return BacktestResult(status = "failed", error = "No forward price data available for this pair.")
