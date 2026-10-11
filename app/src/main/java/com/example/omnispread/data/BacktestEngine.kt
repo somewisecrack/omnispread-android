@@ -71,8 +71,8 @@ object BacktestEngine {
             )
         }
 
-        val xLabel = request.x.replace(".NS", "").replace(".BO", "")
-        val yLabel = request.y.replace(".NS", "").replace(".BO", "")
+        val xLabel = request.x
+        val yLabel = request.y
 
         return BacktestResult(
             status = "completed",

@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.omnispread.data.PairResult
+import com.example.omnispread.data.TickerInsight
 import com.example.omnispread.ui.theme.AccentBlue
 import com.example.omnispread.ui.theme.AccentCyan
 import com.example.omnispread.ui.theme.AccentGreen
@@ -43,6 +44,8 @@ import com.example.omnispread.ui.theme.TextSecondary
 fun ResultCard(
     index: Int,
     result: PairResult,
+    insightX: TickerInsight?,
+    insightY: TickerInsight?,
     interval: String,
     hasEndDate: Boolean,
     onClick: () -> Unit,
@@ -85,17 +88,21 @@ fun ResultCard(
                         "${if (result.z_score > 0) "+" else ""}${String.format("%.2f", result.z_score)}",
                         if (result.z_score > 0) AccentRed else AccentGreen)
                     StatRow("Half-Life", formatHl(result.half_life, interval), TextSecondary)
-                    StatRow("Move/Mean", String.format("%.2f", result.move_to_mean), TextSecondary)
+                    StatRow("Hedge qty", String.format("%.3g", result.qty), TextSecondary)
                 }
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val pColor = if (result.prob_profit >= 70) AccentGreen
-                    else if (result.prob_profit >= 50) AccentBlue else AccentYellow
-                    StatRow("P(Profit)", "${String.format("%.1f", result.prob_profit)}%", pColor)
-                    val hColor = if (result.hurst < 0.35) AccentGreen
-                    else if (result.hurst < 0.45) AccentCyan else AccentYellow
-                    StatRow("Hurst", String.format("%.2f", result.hurst), hColor)
+                    val pColor = if (result.cadf_pvalue < 0.01) AccentGreen
+                    else if (result.cadf_pvalue < 0.03) AccentBlue else AccentYellow
+                    StatRow("CADF p", String.format("%.4f", result.cadf_pvalue), pColor)
+                    StatRow("Johansen", "rank ${result.johansen_rank}", if (result.johansen_rank == 1) AccentGreen else AccentCyan)
                     StatRow("Exp.Ret", "${String.format("%.2f", result.exp_return)}%", AccentYellow)
                 }
+            }
+
+            // Per-ticker sentiment + IV rank
+            Column(Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                TickerStrip(result.x, insightX)
+                TickerStrip(result.y, insightY)
             }
 
             Row(
@@ -130,6 +137,29 @@ fun ResultCard(
 }
 
 @Composable
+fun TickerStrip(symbol: String, insight: TickerInsight?) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(symbol, color = TextSecondary, fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(72.dp))
+        val s = insight?.sentiment
+        if (s == null) MiniTag("news…", TextMuted)
+        else MiniTag("${s.label} ${if (s.headlines.isEmpty()) "" else String.format("%+.2f", s.score)}".trim(), sentimentColor(s.label))
+        insight?.vol?.ivRank?.let { MiniTag("IVR ${it.toInt()}", if (it >= 50) AccentYellow else if (it < 25) AccentCyan else TextSecondary) }
+        insight?.vol?.ivIndex?.let { iv ->
+            val rv = insight.realizedVol21 ?: insight.vol.hv30
+            if (rv != null) MiniTag("IV−RV ${String.format("%+.0f", iv - rv)}", TextSecondary)
+        }
+    }
+}
+
+fun sentimentColor(label: String) = when (label) {
+    "Bullish" -> AccentGreen
+    "Bearish" -> AccentRed
+    "Neutral" -> AccentBlue
+    else -> TextMuted
+}
+
+@Composable
 private fun StatRow(label: String, value: String, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = TextMuted, fontSize = 10.sp, modifier = Modifier.width(72.dp))
@@ -140,7 +170,7 @@ private fun StatRow(label: String, value: String, color: Color) {
 @Composable
 fun MethodBadge(method: String) {
     val color = when (method) {
-        "Both"     -> AccentGreen
+        "Both", "CADF+Johansen" -> AccentGreen
         "Johansen" -> AccentPurple
         else       -> AccentBlue
     }

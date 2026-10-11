@@ -60,8 +60,7 @@ fun BacktestScreen(
     viewModel: BacktestViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    val pairLabel = "${request.x.replace(".NS", "").replace(".BO", "")}/" +
-            request.y.replace(".NS", "").replace(".BO", "")
+    val pairLabel = "${request.x}/${request.y}"
 
     LaunchedEffect(request) { viewModel.runBacktest(request) }
 
