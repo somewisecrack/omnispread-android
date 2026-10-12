@@ -22,10 +22,10 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 @Composable
-fun OmniSpreadTheme(content: @Composable () -> Unit) {
+fun TastySpreadTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = DarkColorScheme,
-        typography  = OmniSpreadTypography,
+        typography  = TastySpreadTypography,
         content     = content,
     )
 }

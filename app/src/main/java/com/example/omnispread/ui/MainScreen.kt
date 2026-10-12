@@ -220,7 +220,7 @@ fun MainScreen(
             // Footer
             item {
                 Text(
-                    "OMNISPREAD — For educational and research purposes only. Not financial advice.",
+                    "TASTYSPREAD — For educational and research purposes only. Not financial advice. Not affiliated with tastytrade.",
                     color     = TextMuted,
                     fontSize  = 11.sp,
                     textAlign = TextAlign.Center,
@@ -270,7 +270,7 @@ private fun AppHeader() {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                "⇌  OMNISPREAD",
+                "⇌  TASTYSPREAD",
                 color      = AccentCyan,
                 fontSize   = 26.sp,
                 fontWeight = FontWeight.ExtraBold,

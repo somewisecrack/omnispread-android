@@ -6,7 +6,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-val OmniSpreadTypography = Typography(
+val TastySpreadTypography = Typography(
     headlineLarge = TextStyle(
         fontFamily   = FontFamily.SansSerif,
         fontWeight   = FontWeight.ExtraBold,

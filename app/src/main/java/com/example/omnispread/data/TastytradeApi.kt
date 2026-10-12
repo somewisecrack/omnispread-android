@@ -226,7 +226,7 @@ class TastytradeApi(private val cfg: TastyConfig) {
     private fun JSONObject.pct(key: String): Double? = optString(key).toDoubleOrNull()?.times(100)
 
     companion object {
-        private const val UA = "omnispread-android/2.0"
+        private const val UA = "tastyspread-android/2.0"
         private val JSON = "application/json".toMediaType()
 
         fun errorMessage(body: String): String = try {

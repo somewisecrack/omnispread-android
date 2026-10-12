@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "OmniSpread"
+rootProject.name = "TastySpread"
 include(":app")

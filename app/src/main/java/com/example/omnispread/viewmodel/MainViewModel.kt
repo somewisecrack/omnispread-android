@@ -236,7 +236,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val results = withContext(Dispatchers.IO) {
                 listOfNotNull(ready.plan.legX, ready.plan.legY).map { leg ->
                     val price = kotlin.math.abs(leg.netPrice)
-                    val order = a.verticalOrder(leg, price, "omnispread-${UUID.randomUUID().toString().take(12)}")
+                    val order = a.verticalOrder(leg, price, "tastyspread-${UUID.randomUUID().toString().take(12)}")
                     if (live) a.submit(account, order, leg.underlying) else a.dryRun(account, order, leg.underlying)
                 }
             }

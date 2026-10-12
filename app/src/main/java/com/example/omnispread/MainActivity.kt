@@ -17,7 +17,7 @@ import com.example.omnispread.ui.BacktestScreen
 import com.example.omnispread.ui.MainScreen
 import com.example.omnispread.ui.TradeScreen
 import com.example.omnispread.ui.theme.BgPrimary
-import com.example.omnispread.ui.theme.OmniSpreadTheme
+import com.example.omnispread.ui.theme.TastySpreadTheme
 import com.example.omnispread.viewmodel.MainViewModel
 
 class MainActivity : ComponentActivity() {
@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            OmniSpreadTheme {
+            TastySpreadTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = BgPrimary) {
                     val navController = rememberNavController()
                     val mainViewModel: MainViewModel = viewModel()

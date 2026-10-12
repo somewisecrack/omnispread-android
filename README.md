@@ -1,8 +1,8 @@
-# OmniSpread
+# TastySpread (Android)
 
-**Statistical pairs-trading scanner for S&P 100 stocks, with tastytrade option spreads and news sentiment — runs on-device, no server required.**
+**Statistical pairs-trading scanner for S&P 100 stocks (the Android version of [TastySpread](https://github.com/somewisecrack/tastyspread)), with tastytrade option spreads and news sentiment — runs on-device, no server required.**
 
-OmniSpread screens every pair in a universe for cointegration using the same **v2** method as the [OmniSpread Python backend](https://github.com/somewisecrack/OmniSpread), adds per-ticker **news sentiment** (TickerVibe-style) and **tastytrade volatility data**, and turns a signal into a pair of **credit or debit vertical spreads** that you can dry-run and place from the phone.
+TastySpread screens every pair in a universe for cointegration using the same **v2** method as the [OmniSpread Python backend](https://github.com/somewisecrack/OmniSpread), adds per-ticker **news sentiment** (TickerVibe-style) and **tastytrade volatility data**, and turns a signal into a pair of **credit or debit vertical spreads** that you can dry-run and place from the phone.
 
 ---
 
@@ -118,7 +118,7 @@ app/src/main/java/com/example/omnispread/
 
 ## Disclaimer
 
-OmniSpread is **for educational and research purposes only**. It is not financial advice. Past statistical relationships do not guarantee future performance. Options involve risk and are not suitable for all investors. You are responsible for every order placed from your account.
+TastySpread is **for educational and research purposes only**. Not affiliated with tastytrade. It is not financial advice. Past statistical relationships do not guarantee future performance. Options involve risk and are not suitable for all investors. You are responsible for every order placed from your account.
 
 ---
 
